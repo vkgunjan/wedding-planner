@@ -2,7 +2,7 @@
 /* Wedding Planner: budget, functions, guest list and checklist for both families.
    Plain JavaScript, no build step. The plan is saved in this browser straight away and, with a GitHub token,
    in a private repo as data/wedding.json (merged by id, newest change wins, so several phones can edit). */
-const APP_VERSION = '2026-11-21.1'; // keep in step with CACHE in sw.js
+const APP_VERSION = '2026-11-21.2'; // keep in step with CACHE in sw.js
 const C = window.CATALOG;
 
 /* ---------- small helpers ---------- */
@@ -244,7 +244,11 @@ function applyTier() {
 /* ---------- navigation ---------- */
 const PLAN_VIEWS = ['home', 'functions', 'fn', 'budget', 'guests', 'tasks'];
 function showView(v, opts = {}) {
-  if (!hasPlan() && PLAN_VIEWS.includes(v)) v = 'setup';
+  let redirected = false;
+  if (!hasPlan() && PLAN_VIEWS.includes(v)) {
+    if (ui.view === 'setup' || opts.fromTab) { toast('First create the plan: tick the functions and tap "Create my wedding plan"'); redirected = true; }
+    v = 'setup';
+  }
   if (v === 'fn') { if (opts.id) ui.fnId = opts.id; if (!evById(ui.fnId)) v = 'functions'; }
   ui.view = v; saveUi();
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
@@ -254,7 +258,8 @@ function showView(v, opts = {}) {
   if (v === 'setup') renderSetup();
   if (v === 'fn') renderFnForm();
   render();
-  if (!opts.keepScroll) window.scrollTo({ top: 0 });
+  if (redirected && !$('#setupForm').hidden) $('#setupForm').scrollIntoView({ behavior: 'smooth' });
+  else if (!opts.keepScroll) window.scrollTo({ top: 0 });
 }
 function render() {
   renderHeader();
@@ -597,6 +602,11 @@ function renderTasks() {
 let suTier = 'mid', pendingJoin = null;
 function renderSetup() {
   $('#setupForm').hidden = hasPlan();
+  // details already typed in Settings (or synced from another phone) carry over into the form
+  const pre = { suBride: 'bride', suGroom: 'groom', suDate: 'date', suCity: 'city', suType: 'type', suGB: 'guestsBride', suGG: 'guestsGroom' };
+  Object.entries(pre).forEach(([id, k]) => { if (db.info[k] != null && db.info[k] !== '') $('#' + id).value = db.info[k]; });
+  if (db.info.tier) { suTier = db.info.tier; $$('#suTier button').forEach(x => x.classList.toggle('active', x.dataset.tier === suTier)); }
+  $('#setupNote').hidden = hasPlan() || !Object.values(pre).some(k => db.info[k]);
   $('#joinCard').hidden = !pendingJoin;
   if (pendingJoin) {
     $('#joinText').textContent = `This link connects the app to the shared wedding plan in the GitHub repository "${pendingJoin.o}/${pendingJoin.r}". The plan downloads here, and any change you make is shared with everyone else.`;
@@ -638,6 +648,7 @@ function renderSettingsDynamic() {
       hint = '⚠ This date may fall in Kharmas (roughly mid-Dec to mid-Jan and mid-Mar to mid-Apr), when weddings are usually not held. Please check with your pandit.';
   }
   $('#sDateHint').textContent = hint;
+  $('#noPlanNote').hidden = hasPlan();
   $('#sGoldHint').textContent = `Jewellery is priced at ${inr(goldRate())} per gram (22K rate + ${num(inf('making'))}% making + 3% GST). The 22K rate was ₹${C.GOLD.k22.toLocaleString('en-IN')} per gram on ${C.GOLD.asOf} (${C.GOLD.src}). Update it before you buy.`;
   $('#aboutPrices').innerHTML = C.NOTES.map(n => `<p style="margin:0 0 8px">${esc(n)}</p>`).join('') +
     `<details><summary style="cursor:pointer">Sources</summary><ul style="padding-left:18px;margin:6px 0 0">${C.SOURCES.map(s => `<li><a href="${esc(s)}" target="_blank" rel="noopener">${esc(s.replace(/^https?:\/\/(www\.)?/, '').slice(0, 70))}</a></li>`).join('')}</ul></details>`;
@@ -1010,7 +1021,7 @@ function handleJoinHash() {
 
 /* ---------- events ---------- */
 function bind() {
-  $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) showView(b.dataset.view); });
+  $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) showView(b.dataset.view, { fromTab: true }); });
   $('#setBtn').addEventListener('click', () => showView('settings'));
   $('#syncBtn').addEventListener('click', () => {
     if (!ghReady()) { showView('settings'); toast('Add a GitHub token in Settings to share the plan'); return; }

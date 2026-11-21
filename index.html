@@ -285,6 +285,7 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 24px)}
     </div>
     <form id="setupForm" class="card" autocomplete="off">
       <h2>💍 Start a new plan</h2>
+      <p class="desc" id="setupNote" hidden><b>One step left:</b> your plan has no functions or expenses yet, so Functions, Budget, Guests and Checklist have nothing to show. Check the details below, tick the functions you will hold, and tap <b>Create my wedding plan</b> at the bottom.</p>
       <div class="grid2">
         <div class="field"><label for="suBride">Bride's name</label><input id="suBride" placeholder="Bride"></div>
         <div class="field"><label for="suGroom">Groom's name</label><input id="suGroom" placeholder="Groom"></div>
@@ -358,6 +359,10 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 24px)}
 
   <!-- ============ SETTINGS ============ -->
   <section class="view" id="view-settings">
+    <div class="card desc" id="noPlanNote" hidden>
+      <b>Your plan is not created yet.</b> The details here are saved, but there are no functions, expenses or checklist until you create the plan.
+      <div style="margin-top:10px"><button class="btn primary" type="button" data-go="setup">Create the plan now</button></div>
+    </div>
     <form class="card" id="infoForm" autocomplete="off">
       <h2>💍 Wedding details</h2>
       <div class="grid2">

@@ -1,5 +1,5 @@
 // Offline support: the planner keeps working without internet; changes sync to GitHub later.
-const CACHE = 'wedplan-2026-11-21.1'; // keep in step with APP_VERSION in app.js
+const CACHE = 'wedplan-2026-11-21.2'; // keep in step with APP_VERSION in app.js
 const SHELL = ['./', 'index.html', 'app.js', 'catalog.js', 'manifest.webmanifest', 'icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
 
