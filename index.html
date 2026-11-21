@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#881337">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Wedding Planner</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<style>
+:root{
+  --bg:#faf6f1; --card:#ffffff; --text:#221a16; --muted:#6f645c; --line:#ece3d9;
+  --primary:#9f1239; --primary-2:#ffe4e6; --top:#881337; --accent:#b45309; --accent-2:#fef3c7;
+  --ok:#15803d; --ok-bg:#dcfce7; --warn:#a16207; --warn-bg:#fef9c3; --danger:#b91c1c; --danger-bg:#fee2e2;
+  --info:#1d4ed8; --info-bg:#dbeafe;
+  /* who pays: first three slots of the validated categorical palette */
+  --bride:#eb6834; --groom:#2a78d6; --shared:#1baf7a; --bar:#be123c; --track:#f3ebe3;
+  --shadow:0 1px 2px rgba(60,30,20,.06),0 2px 10px rgba(60,30,20,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15100e; --card:#211916; --text:#f3ece6; --muted:#b4a89e; --line:#3a2e29;
+    --primary:#fb7185; --primary-2:#4c0519; --top:#4c0519; --accent:#fbbf24; --accent-2:#451a03;
+    --ok:#4ade80; --ok-bg:#14532d; --warn:#facc15; --warn-bg:#713f12; --danger:#f87171; --danger-bg:#7f1d1d;
+    --info:#93c5fd; --info-bg:#1e3a8a;
+    --bride:#d95926; --groom:#3987e5; --shared:#199e70; --bar:#fb7185; --track:#2e2420;
+    --shadow:none;
+  }
+}
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-bottom:calc(74px + env(safe-area-inset-bottom));-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--primary)}
+
+/* ---------- header & navigation ---------- */
+.top{position:sticky;top:0;z-index:20;background:var(--top);color:#fff;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top))}
+.top .brand{min-width:0}
+.top h1{margin:0;font:700 19px/1.2 Georgia,"Times New Roman",serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top small{display:block;opacity:.85;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-actions{display:flex;gap:8px;align-items:center;flex:none}
+.sync{display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);
+  color:#fff;border-radius:999px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.sync .dot{width:8px;height:8px;border-radius:50%;background:#e2d6cf}
+.sync[data-s=ok] .dot{background:#4ade80}.sync[data-s=pending] .dot,.sync[data-s=syncing] .dot{background:#facc15}
+.sync[data-s=error] .dot,.sync[data-s=offline] .dot{background:#f87171}
+.sync[data-s=syncing] .dot{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+.icon-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);
+  color:#fff;display:grid;place-items:center;cursor:pointer}
+.icon-btn svg{width:20px;height:20px}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,1fr);
+  background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{border:0;background:none;padding:8px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  font-size:11px;color:var(--muted);cursor:pointer}
+.tabs button.active{color:var(--primary);font-weight:700}
+.tabs svg{width:24px;height:24px}
+@media (min-width:900px){
+  body{padding-bottom:24px}
+  .tabs{position:sticky;top:var(--hdr,62px);bottom:auto;display:flex;justify-content:center;gap:4px;border-top:0;border-bottom:1px solid var(--line);padding:0 16px}
+  .tabs button{flex-direction:row;gap:8px;font-size:14px;padding:12px 16px;border-bottom:3px solid transparent}
+  .tabs button.active{border-bottom-color:var(--primary)}
+  .tabs svg{width:20px;height:20px}
+}
+
+/* ---------- layout ---------- */
+main{max-width:1120px;margin:0 auto;padding:16px}
+.view{display:none}.view.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow);min-width:0}
+.cols{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.cols>.card{margin-bottom:0}
+.cols+.cols,.cols+.card,.card+.cols{margin-top:14px}
+@media (min-width:900px){.cols.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cols.wide-left{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
+h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+h2 .grow{flex:1}
+h3{font-size:14px;margin:16px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+input,select,textarea{width:100%;max-width:100%;min-width:0;display:block;padding:11px 12px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg);min-height:44px}
+textarea{min-height:80px;resize:vertical}
+input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;height:44px;line-height:20px;text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type=checkbox]{width:20px;height:20px;min-height:0;display:inline-block;margin:0;accent-color:var(--primary);flex:none}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:0;border-color:transparent}
+.field{margin-bottom:12px;min-width:0}
+.grid2,.grid3,.grid4{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:640px){.grid3,.grid4{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media (max-width:380px){.grid2{grid-template-columns:1fr}}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500;color:var(--text);margin:4px 0 12px;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:10px 16px;
+  min-height:44px;font-weight:600;cursor:pointer;background:var(--primary-2);color:var(--primary);text-decoration:none}
+.btn.primary{background:var(--primary);color:#fff}
+@media (prefers-color-scheme: dark){.btn.primary{color:#1a0b0e}}
+.btn.block{width:100%}
+.btn.danger{background:var(--danger-bg);color:var(--danger)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.btn.sm{min-height:34px;padding:5px 12px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-row{display:flex;flex-wrap:wrap;gap:10px}
+.btn-row .btn{flex:1 1 140px}
+.muted{color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);margin:6px 0 0}
+.empty{color:var(--muted);text-align:center;padding:18px 8px;font-size:14px}
+.right{text-align:right}
+.nowrap{white-space:nowrap}
+.money{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- pills, stats ---------- */
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;line-height:1.5}
+.pill.bride{background:color-mix(in srgb,var(--bride) 16%,transparent);color:var(--text)}
+.pill.groom{background:color-mix(in srgb,var(--groom) 16%,transparent);color:var(--text)}
+.pill.shared,.pill.both{background:color-mix(in srgb,var(--shared) 16%,transparent);color:var(--text)}
+.pill .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:0}
+.pill.bride .sw{background:var(--bride)}.pill.groom .sw{background:var(--groom)}.pill.shared .sw,.pill.both .sw{background:var(--shared)}
+.pill.plan{background:var(--track);color:var(--muted)}.pill.quote{background:var(--info-bg);color:var(--info)}
+.pill.booked{background:var(--warn-bg);color:var(--warn)}.pill.paid{background:var(--ok-bg);color:var(--ok)}
+.pill.over{background:var(--danger-bg);color:var(--danger)}.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.yes{background:var(--ok-bg);color:var(--ok)}.pill.no{background:var(--danger-bg);color:var(--danger)}
+.pill.maybe{background:var(--warn-bg);color:var(--warn)}.pill.pending{background:var(--track);color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.stats.six{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (min-width:700px){.stats{grid-template-columns:repeat(4,minmax(0,1fr))}.stats.six{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0;box-shadow:var(--shadow)}
+.stat span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- hero ---------- */
+.hero{background:linear-gradient(135deg,#9f1239,#7c2d12);color:#fff;border:0;position:relative;overflow:hidden}
+@media (prefers-color-scheme: dark){.hero{background:linear-gradient(135deg,#4c0519,#431407)}}
+.hero:after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
+  border:18px solid rgba(251,191,36,.25)}
+.hero .names{font:700 26px/1.2 Georgia,"Times New Roman",serif;margin:0 0 4px}
+.hero .meta{opacity:.9;font-size:14px}
+.hero .count{display:flex;gap:18px;margin-top:12px;flex-wrap:wrap}
+.hero .count b{display:block;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.hero .count span{font-size:12px;opacity:.85}
+.hero .btn{background:rgba(255,255,255,.16);color:#fff;position:relative;z-index:1}
+
+/* ---------- bars (single-series = one colour; who-pays = 3 categorical slots) ---------- */
+.seg-bar{display:flex;height:14px;border-radius:4px;overflow:hidden;gap:2px;background:var(--card);margin:6px 0 10px}
+.seg-bar i{display:block;height:100%;min-width:2px}
+.seg-bar i.bride{background:var(--bride)}.seg-bar i.groom{background:var(--groom)}.seg-bar i.shared{background:var(--shared)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--muted)}
+.legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.sw.bride{background:var(--bride)}.sw.groom{background:var(--groom)}.sw.shared{background:var(--shared)}
+.hbars{list-style:none;margin:0;padding:0}
+.hbars li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:7px 4px;border-radius:8px;cursor:pointer}
+.hbars li:hover{background:var(--bg)}
+.hbars .lbl{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbars .val{font-size:14px;font-weight:600;text-align:right}
+.hbars .val small{color:var(--muted);font-weight:500;margin-left:6px}
+.hbars .track{grid-column:1 / -1;height:8px;background:var(--track);border-radius:0 4px 4px 0}
+.hbars .fill{height:100%;background:var(--bar);border-radius:0 4px 4px 0;min-width:2px}
+.meter{height:10px;background:var(--track);border-radius:0 5px 5px 0;margin:6px 0 4px;position:relative}
+.meter i{display:block;height:100%;border-radius:0 5px 5px 0;background:var(--bar)}
+.meter i.over{background:var(--danger)}
+.fam{padding:10px 0}.fam+.fam{border-top:1px solid var(--line)}
+.fam .row1{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+
+/* ---------- lists ---------- */
+.list{list-style:none;margin:0;padding:0}
+.list>li+li{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 4px;background:none;border:0;text-align:left;cursor:pointer;color:inherit}
+.row:hover{background:var(--bg)}
+.grow{flex:1;min-width:0}
+.name{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.end{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.av{flex:0 0 38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
+.av.bride{background:var(--bride)}.av.groom{background:var(--groom)}.av.shared{background:var(--shared)}
+.datebox{flex:0 0 52px;border-radius:10px;background:var(--primary-2);color:var(--primary);text-align:center;padding:5px 0;line-height:1.1}
+.datebox b{display:block;font-size:20px}.datebox span{font-size:11px;font-weight:700;text-transform:uppercase}
+.datebox.none{background:var(--track);color:var(--muted)}
+.overdue{color:var(--danger);font-weight:600}
+details.group{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--card);box-shadow:var(--shadow)}
+details.group>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:700}
+details.group>summary::-webkit-details-marker{display:none}
+details.group>summary:after{content:"▾";color:var(--muted);transition:transform .2s}
+details.group:not([open])>summary:after{transform:rotate(-90deg)}
+details.group>.list{padding:0 10px 6px;border-top:1px solid var(--line)}
+.ico{font-size:20px;line-height:1;flex:none;width:26px;text-align:center}
+.filters{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:12px}
+.filters .q{grid-column:1 / -1}
+@media (min-width:900px){.filters{grid-template-columns:2fr repeat(4,minmax(0,1fr))}.filters .q{grid-column:auto}}
+.filters select,.filters input{min-height:40px;padding:8px 10px;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px dashed var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--text)}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:8px 6px;font-weight:600;color:var(--muted);cursor:pointer;font-size:14px}
+.seg button.active{background:var(--primary);color:#fff}
+@media (prefers-color-scheme: dark){.seg button.active{color:#1a0b0e}}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.task{display:flex;align-items:flex-start;gap:12px;padding:10px 4px}
+.task input{margin-top:2px}
+.task.done .t{text-decoration:line-through;color:var(--muted)}
+.task .t{cursor:pointer}
+.fnpick{display:flex;gap:12px;align-items:flex-start;padding:10px 4px;cursor:pointer}
+.fnpick input{margin-top:3px}
+.fnpick b{display:block}
+.fnpick small{display:block;color:var(--muted);font-size:13px}
+.desc{background:var(--accent-2);border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 12px}
+.desc b{color:var(--accent)}
+.estline{display:flex;justify-content:space-between;gap:10px;align-items:baseline;background:var(--bg);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.estline b{font-size:20px;font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;background:#221a16;color:#fff;
+  padding:10px 16px;border-radius:10px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:calc(100vw - 32px);opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}.toast.err{background:var(--danger)}.toast.ok{background:#166534}
+
+/* ---------- dialogs ---------- */
+dialog{border:0;border-radius:16px;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);background:var(--card);color:var(--text);
+  box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(20,10,8,.55)}
+dialog form{display:flex;flex-direction:column;max-height:calc(100dvh - 24px)}
+.dlg-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.dlg-head h2{margin:0;flex:1}
+.dlg-body{padding:16px;overflow:auto}
+.dlg-foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.dlg-foot .left{margin-right:auto}
+.x{border:0;background:none;font-size:26px;line-height:1;cursor:pointer;color:var(--muted);padding:0 4px}
+.evchecks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 12px}
+.evchecks .check{margin:4px 0}
+
+/* ---------- print ---------- */
+#printArea{display:none}
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  body.printing>*:not(#printArea){display:none!important}
+  body.printing #printArea{display:block;font-size:12px}
+  #printArea h1{font:700 20px Georgia,serif;margin:0 0 4px}
+  #printArea h2{font-size:14px;margin:16px 0 6px}
+  #printArea table{font-size:11px}
+  #printArea th,#printArea td{border-bottom:1px solid #ccc;padding:4px}
+  #printArea tr{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1 id="appTitle">Wedding Planner</h1>
+    <small id="appSub">Budget · Functions · Guests</small>
+  </div>
+  <div class="top-actions">
+    <button id="syncBtn" class="sync" data-s="local" type="button" title="Cloud sync"><span class="dot"></span><span id="syncText">On this device</span></button>
+    <button id="setBtn" class="icon-btn" type="button" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button type="button" data-view="home" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button type="button" data-view="functions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Functions</button>
+  <button type="button" data-view="budget"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 8h12M14.5 21 6 13h3a5 5 0 0 0 0-10"/></svg>Budget</button>
+  <button type="button" data-view="guests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>Guests</button>
+  <button type="button" data-view="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Checklist</button>
+</nav>
+
+<main>
+  <!-- ============ SETUP (first run) ============ -->
+  <section class="view" id="view-setup">
+    <div class="card hero">
+      <p class="names">Plan the wedding together</p>
+      <p class="meta">Estimate every cost for both families: functions, venue, catering, decoration, clothes, jewellery, photography, cards and the guest list, all in one place.</p>
+    </div>
+    <div class="card" id="joinCard" hidden>
+      <h2>🔗 Connect to the shared plan</h2>
+      <p id="joinText" class="muted"></p>
+      <div class="field"><label for="joinUser">Your name (shown in the change history)</label><input id="joinUser" placeholder="e.g. Manisha / Vikash / Papa"></div>
+      <button class="btn primary block" id="joinGo" type="button">Connect this device</button>
+    </div>
+    <form id="setupForm" class="card" autocomplete="off">
+      <h2>💍 Start a new plan</h2>
+      <div class="grid2">
+        <div class="field"><label for="suBride">Bride's name</label><input id="suBride" placeholder="Bride"></div>
+        <div class="field"><label for="suGroom">Groom's name</label><input id="suGroom" placeholder="Groom"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="suDate">Wedding date (can be changed later)</label><input id="suDate" type="date"></div>
+        <div class="field"><label for="suCity">City / destination</label><input id="suCity" placeholder="e.g. Patna"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label for="suType">Wedding type</label>
+          <select id="suType"><option value="home">In our home city</option><option value="destination">Destination wedding</option></select></div>
+        <div class="field"><label for="suGB">Guests, bride side</label><input id="suGB" type="number" min="0" inputmode="numeric" value="300"></div>
+        <div class="field"><label for="suGG">Guests, groom side</label><input id="suGG" type="number" min="0" inputmode="numeric" value="300"></div>
+      </div>
+      <label>Cost level for the starting estimates</label>
+      <div class="seg" id="suTier">
+        <button type="button" data-tier="low">Budget</button>
+        <button type="button" data-tier="mid" class="active">Mid-range</button>
+        <button type="button" data-tier="high">Premium</button>
+      </div>
+      <h3>Functions to plan</h3>
+      <p class="hint" style="margin:-4px 0 8px">Tick the functions you will hold. Functions marked "each home" happen separately at the bride's and the groom's house, so two entries are created. You can add or remove functions later.</p>
+      <div id="suFns"></div>
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="suTasks" checked> Add the planning checklist (about 60 tasks)</label>
+      <button class="btn primary block" type="submit">Create my wedding plan</button>
+      <p class="hint">Starting prices come from 2025–26 Indian wedding price guides. Change any amount to your real quotes as you get them.</p>
+    </form>
+    <div class="card">
+      <h2>📲 Already started on another phone?</h2>
+      <p class="muted" style="margin-top:0">Open the <b>family setup link</b> from that phone (Settings → Share with family), or enter the GitHub details in Settings. The plan will download here.</p>
+      <button class="btn block" type="button" data-go="settings">Open settings</button>
+    </div>
+  </section>
+
+  <!-- ============ HOME ============ -->
+  <section class="view active" id="view-home"></section>
+
+  <!-- ============ FUNCTIONS ============ -->
+  <section class="view" id="view-functions"></section>
+
+  <!-- ============ ONE FUNCTION ============ -->
+  <section class="view" id="view-fn"></section>
+
+  <!-- ============ BUDGET ============ -->
+  <section class="view" id="view-budget">
+    <div class="filters" id="bFilters">
+      <input class="q" id="bQ" type="search" placeholder="Search item, vendor, notes…">
+      <select id="bSide"></select>
+      <select id="bEv"></select>
+      <select id="bCat"></select>
+      <select id="bStatus"></select>
+    </div>
+    <div id="budgetBody"></div>
+  </section>
+
+  <!-- ============ GUESTS ============ -->
+  <section class="view" id="view-guests">
+    <div id="guestStats"></div>
+    <div class="filters" id="gFilters">
+      <input class="q" id="gQ" type="search" placeholder="Search name, phone, city, relation…">
+      <select id="gSide"></select>
+      <select id="gGroup"></select>
+      <select id="gRsvp"></select>
+      <select id="gEv"></select>
+    </div>
+    <div id="guestBody"></div>
+  </section>
+
+  <!-- ============ CHECKLIST ============ -->
+  <section class="view" id="view-tasks"></section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view" id="view-settings">
+    <form class="card" id="infoForm" autocomplete="off">
+      <h2>💍 Wedding details</h2>
+      <div class="grid2">
+        <div class="field"><label for="sBride">Bride's name</label><input id="sBride" data-info="bride"></div>
+        <div class="field"><label for="sGroom">Groom's name</label><input id="sGroom" data-info="groom"></div>
+        <div class="field"><label for="sBrideFam">Bride's family (e.g. father's name)</label><input id="sBrideFam" data-info="brideFamily"></div>
+        <div class="field"><label for="sGroomFam">Groom's family</label><input id="sGroomFam" data-info="groomFamily"></div>
+        <div class="field"><label for="sDate">Wedding date</label><input id="sDate" type="date" data-info="date"></div>
+        <div class="field"><label for="sCity">City / destination</label><input id="sCity" data-info="city"></div>
+        <div class="field"><label for="sType">Wedding type</label>
+          <select id="sType" data-info="type"><option value="home">In our home city</option><option value="destination">Destination wedding</option></select></div>
+        <div class="field"><label for="sVenue">Main wedding venue</label><input id="sVenue" data-info="venue" placeholder="Hotel / lawn / banquet name"></div>
+      </div>
+      <p class="hint" id="sDateHint"></p>
+    </form>
+
+    <form class="card" id="moneyForm" autocomplete="off">
+      <h2>💰 Budget & guests</h2>
+      <div class="grid2">
+        <div class="field"><label for="sBudB">Bride side budget (₹)</label><input id="sBudB" type="number" min="0" inputmode="numeric" data-info="budgetBride" data-num></div>
+        <div class="field"><label for="sBudG">Groom side budget (₹)</label><input id="sBudG" type="number" min="0" inputmode="numeric" data-info="budgetGroom" data-num></div>
+        <div class="field"><label for="sGB">Expected guests, bride side</label><input id="sGB" type="number" min="0" inputmode="numeric" data-info="guestsBride" data-num></div>
+        <div class="field"><label for="sGG">Expected guests, groom side</label><input id="sGG" type="number" min="0" inputmode="numeric" data-info="guestsGroom" data-num></div>
+        <div class="field"><label for="sShare">Bride side's share of "Shared" costs (%)</label><input id="sShare" type="number" min="0" max="100" inputmode="numeric" data-info="sharedPct" data-num></div>
+        <div class="field"><label for="sBuffer">Extra buffer for surprises (%)</label><input id="sBuffer" type="number" min="0" max="50" inputmode="numeric" data-info="buffer" data-num></div>
+      </div>
+      <p class="hint" style="margin-top:-4px">Expected guests are used until the guest list is filled in. After that, each function uses the people invited to it.</p>
+      <h3>Gold rate (for jewellery)</h3>
+      <div class="grid2">
+        <div class="field"><label for="sGold">22K gold, ₹ per gram</label><input id="sGold" type="number" min="0" inputmode="numeric" data-info="gold22" data-num></div>
+        <div class="field"><label for="sMaking">Making charges (%)</label><input id="sMaking" type="number" min="0" max="40" inputmode="numeric" data-info="making" data-num></div>
+      </div>
+      <p class="hint" id="sGoldHint"></p>
+      <h3>Cost level</h3>
+      <div class="grid2">
+        <div class="field"><label for="sTier">Starting estimates use</label>
+          <select id="sTier" data-info="tier"><option value="low">Budget prices</option><option value="mid">Mid-range prices</option><option value="high">Premium prices</option></select></div>
+        <div class="field"><label>&nbsp;</label><button class="btn block" id="sApplyTier" type="button">Re-price items not yet booked</button></div>
+      </div>
+      <p class="hint" style="margin-top:-4px">Re-pricing only changes items that still say "Planning" or "Got quotes" and have no final amount.</p>
+    </form>
+
+    <form class="card" id="cfgForm" autocomplete="off">
+      <h2>☁️ GitHub sync (shared by both families)</h2>
+      <p class="hint" style="margin:-6px 0 12px">The plan is saved on this device straight away. With a GitHub token, it is also saved to the private <b>wedding</b> repository as <code>data/wedding.json</code>, and every phone that uses the same repository sees the same plan. Every save is a commit, so you can see who changed what.</p>
+      <div class="field"><label for="cUser">Your name (shown in the change history)</label><input id="cUser" placeholder="e.g. Vikash"></div>
+      <div class="grid2">
+        <div class="field"><label for="cOwner">GitHub owner</label><input id="cOwner" placeholder="vkgunjan" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="cRepo">Data repository (private)</label><input id="cRepo" placeholder="wedding" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="cBranch">Branch</label><input id="cBranch" placeholder="main" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="cFolder">Folder</label><input id="cFolder" placeholder="data" autocapitalize="off" spellcheck="false"></div>
+      </div>
+      <div class="field"><label for="cToken">Access token (fine-grained, Contents: Read and write)</label><input id="cToken" type="password" placeholder="github_pat_…" autocapitalize="off" spellcheck="false"></div>
+      <div class="btn-row">
+        <button class="btn primary" type="submit">Save sync settings</button>
+        <button class="btn" type="button" id="cSyncNow">Sync now</button>
+      </div>
+      <p class="hint" id="cLast"></p>
+      <h3>Share with family</h3>
+      <p class="hint" style="margin-top:-4px">This link sets up another phone in one tap: the bride's family, parents, siblings. <b>It contains the access token, so anyone with the link can edit the plan.</b> Send it only to family, and make a new token if a phone is lost.</p>
+      <div class="btn-row" style="margin-top:10px"><button class="btn" type="button" id="cShare">Copy family setup link</button></div>
+    </form>
+
+    <div class="card">
+      <h2>📤 Export & backup</h2>
+      <div class="btn-row">
+        <button class="btn" type="button" id="xExcel">Download Excel</button>
+        <button class="btn" type="button" id="xPrint">Print budget report</button>
+        <button class="btn" type="button" id="xBackup">Download backup (.json)</button>
+        <button class="btn" type="button" id="xRestore">Restore from backup</button>
+      </div>
+      <input type="file" id="xFile" accept=".json,application/json" hidden>
+      <p class="hint">Restoring merges the backup into this plan, and the newest version of each entry wins.</p>
+    </div>
+
+    <div class="card">
+      <h2>ℹ️ About the prices</h2>
+      <div id="aboutPrices" class="muted" style="font-size:14px"></div>
+    </div>
+
+    <div class="card">
+      <h2>⚠️ This device</h2>
+      <div class="btn-row">
+        <button class="btn danger" type="button" id="xReset">Erase the plan on this device</button>
+      </div>
+      <p class="hint">Removes the data from this browser only. If GitHub sync is on, the plan comes back from GitHub the next time you sync.</p>
+      <p class="hint" id="appVer"></p>
+    </div>
+  </section>
+</main>
+
+<!-- ============ DIALOGS ============ -->
+<dialog id="itemDlg">
+  <form id="itemForm" method="dialog" autocomplete="off">
+    <div class="dlg-head"><h2 id="itemTitle">Expense</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <input type="hidden" id="iId">
+      <div class="field"><label for="iName">What is it?</label><input id="iName" list="iNames" required placeholder="e.g. Catering, Mandap decoration, Bridal lehenga"><datalist id="iNames"></datalist></div>
+      <div class="grid3">
+        <div class="field"><label for="iCat">Category</label><select id="iCat"></select></div>
+        <div class="field"><label for="iEv">Function</label><select id="iEv"></select></div>
+        <div class="field"><label for="iSide">Paid by</label>
+          <select id="iSide"><option value="bride">Bride side</option><option value="groom">Groom side</option><option value="shared">Shared</option></select></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label for="iQty">Quantity</label><input id="iQty" type="number" min="0" step="any" inputmode="decimal"></div>
+        <div class="field"><label for="iUnit">Unit</label><input id="iUnit" list="iUnits" placeholder="lump sum"><datalist id="iUnits"></datalist></div>
+        <div class="field"><label for="iRate">Rate (₹ per unit)</label><input id="iRate" type="number" min="0" step="any" inputmode="decimal"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="iPerGuest"> Quantity = number of guests at this function</label>
+      <label class="check" id="iGoldRow"><input type="checkbox" id="iGold"> Rate = today's 22K gold rate + making charges (set in Settings)</label>
+      <div class="estline"><span class="muted">Estimate</span><b id="iEst">₹0</b></div>
+      <p class="hint" id="iHint" style="margin:-6px 0 12px"></p>
+      <div class="grid3">
+        <div class="field"><label for="iActual">Final price (if booked)</label><input id="iActual" type="number" min="0" step="any" inputmode="decimal" placeholder="—"></div>
+        <div class="field"><label for="iPaid">Paid so far</label><input id="iPaid" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></div>
+        <div class="field"><label for="iStatus">Status</label><select id="iStatus"></select></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label for="iDue">Next payment due</label><input id="iDue" type="date"></div>
+        <div class="field"><label for="iVendor">Vendor / shop</label><input id="iVendor"></div>
+        <div class="field"><label for="iPhone">Vendor phone</label><input id="iPhone" type="tel" inputmode="tel"></div>
+      </div>
+      <div class="field"><label for="iNotes">Details (package, what's included, address, advance receipt…)</label><textarea id="iNotes"></textarea></div>
+      <p class="hint" id="iBy"></p>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger sm left" type="button" id="iDel">Delete</button>
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="guestDlg">
+  <form id="guestForm" method="dialog" autocomplete="off">
+    <div class="dlg-head"><h2 id="guestTitle">Guest</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <input type="hidden" id="gId">
+      <div class="field"><label for="gName">Name (person or family)</label><input id="gName" required placeholder="e.g. Ramesh Sharma ji & family"></div>
+      <div class="grid3">
+        <div class="field"><label for="gSideI">Side</label><select id="gSideI"><option value="bride">Bride side</option><option value="groom">Groom side</option></select></div>
+        <div class="field"><label for="gGroupI">Group</label><select id="gGroupI"></select></div>
+        <div class="field"><label for="gCount">People</label><input id="gCount" type="number" min="1" inputmode="numeric" value="1"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label for="gRel">Relation</label><input id="gRel" placeholder="e.g. Mama ji, college friend"></div>
+        <div class="field"><label for="gPhone">Phone</label><input id="gPhone" type="tel" inputmode="tel"></div>
+        <div class="field"><label for="gCity">City</label><input id="gCity"></div>
+      </div>
+      <label>Invited to</label>
+      <div class="evchecks" id="gEvents"></div>
+      <div class="grid2" style="margin-top:8px">
+        <div class="field"><label for="gRsvpI">Coming?</label><select id="gRsvpI"></select></div>
+        <div class="field"><label>&nbsp;</label>
+          <label class="check"><input type="checkbox" id="gCard"> Card / invite sent</label></div>
+      </div>
+      <label class="check"><input type="checkbox" id="gStay"> Needs a room to stay</label>
+      <div class="field"><label for="gNotes">Notes</label><textarea id="gNotes" style="min-height:60px"></textarea></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger sm left" type="button" id="gDel">Delete</button>
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="bulkDlg">
+  <form id="bulkForm" method="dialog" autocomplete="off">
+    <div class="dlg-head"><h2>Add many guests</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <div class="grid2">
+        <div class="field"><label for="kSide">Side</label><select id="kSide"><option value="bride">Bride side</option><option value="groom">Groom side</option></select></div>
+        <div class="field"><label for="kGroup">Group</label><select id="kGroup"></select></div>
+      </div>
+      <div class="field"><label for="kText">One guest per line: <b>Name, Phone, People, City</b> (only the name is needed)</label>
+        <textarea id="kText" style="min-height:160px" placeholder="Ramesh Sharma, 9876543210, 4, Patna&#10;Sunita Devi, , 2&#10;Office friends, , 10"></textarea></div>
+      <p class="hint">Or import an Excel-saved CSV file with the columns Name, Side, Group, Relation, Phone, City, People. Side and Group can be left out; the choices above are used instead.</p>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn ghost sm" type="button" id="kCsv">Choose CSV file…</button>
+        <button class="btn ghost sm" type="button" id="kSample">Download sample CSV</button>
+      </div>
+      <input type="file" id="kFile" accept=".csv,text/csv" hidden>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Add guests</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="fnDlg">
+  <form id="fnForm" method="dialog" autocomplete="off">
+    <div class="dlg-head"><h2>Add functions</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <div id="fnList"></div>
+      <h3>Or a custom function</h3>
+      <div class="grid2">
+        <div class="field"><label for="fnCustom">Name</label><input id="fnCustom" placeholder="e.g. Cocktail night, Satyanarayan puja"></div>
+        <div class="field"><label for="fnCustomHost">Hosted by</label><select id="fnCustomHost"><option value="bride">Bride side</option><option value="groom">Groom side</option><option value="both">Both families</option></select></div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="taskDlg">
+  <form id="taskForm" method="dialog" autocomplete="off">
+    <div class="dlg-head"><h2 id="taskTitle">Task</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <input type="hidden" id="tId">
+      <div class="field"><label for="tText">Task</label><input id="tText" required></div>
+      <div class="grid2">
+        <div class="field"><label for="tWhen">When</label><select id="tWhen"></select></div>
+        <div class="field"><label for="tOwner">Who</label><select id="tOwner"><option value="both">Both families</option><option value="bride">Bride side</option><option value="groom">Groom side</option></select></div>
+      </div>
+      <div class="field"><label for="tNotes">Notes</label><textarea id="tNotes" style="min-height:60px"></textarea></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn danger sm left" type="button" id="tDel">Delete</button>
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="printArea"></div>
+<div class="toast" id="toast"></div>
+
+<script src="catalog.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
